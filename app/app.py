@@ -1,36 +1,28 @@
 import streamlit as st
 import pandas as pd
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 import plotly.express as px
+import sys
+import os
 
-# --- Load and Prepare Data ---
-@st.cache_data
-def load_data():
-    """Loads the Iris dataset."""
-    iris = load_iris()
-    df = pd.DataFrame(data=iris.data, columns=iris.feature_names)
-    df['species'] = iris.target
-    df['species_name'] = df['species'].map(dict(zip(range(len(iris.target_names)), iris.target_names)))
-    return df, iris.target_names, iris.feature_names
+# --- TEMPORARY PATH FIX FOR LOCAL DEVELOPMENT ---
+# Get the absolute path to the directory containing app.py
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the path to the 'iris' root directory (parent of 'app' directory)
+project_root = os.path.join(current_dir, '..')
+# Add the project root to sys.path if it's not already there
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# --- END TEMPORARY PATH FIX ---
 
-df, species_names, feature_names = load_data()
 
-# --- Train Model ---
-@st.cache_resource
-def train_model(data_df):
-    """Trains a RandomForestClassifier model."""
-    X = data_df[feature_names]
-    y = data_df['species']
-    model = RandomForestClassifier(random_state=42)
-    model.fit(X, y)
-    return model
-
-model = train_model(df)
+# Import functions from our custom modules, now with relative paths
+from data.data_loader import load_iris_data
+from model.model_trainer import train_iris_model
+from utils.visualizer import create_sepal_plot, create_petal_plot
+from model.predictor import predict_species # predictor is also in 'model'
 
 # --- Streamlit App Layout ---
-st.set_page_config(page_title="Iris Species Predictor", layout="centered")
+st.set_page_config(page_title="Modular Iris Species Predictor", layout="centered")
 
 st.markdown(
     """
@@ -80,13 +72,20 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("🌸 Iris Species Predictor")
+st.title("🌸 Modular Iris Species Predictor")
 st.write("Enter the measurements of an Iris flower to predict its species.")
+
+# --- Load Data and Train Model (cached) ---
+# Load data using the function from data_loader.py
+df, species_names, feature_names = load_iris_data()
+
+# Train model using the function from model_trainer.py
+model = train_iris_model(df, feature_names)
 
 # --- User Input Section ---
 st.header("Input Features")
 
-# Create sliders for each feature
+# Create sliders for each feature using min/max/mean from the loaded data
 sepal_length = st.slider(
     "Sepal Length (cm)",
     min_value=float(df['sepal length (cm)'].min()),
@@ -118,11 +117,9 @@ petal_width = st.slider(
 
 # --- Prediction ---
 if st.button("Predict Species"):
-    input_data = pd.DataFrame([[sepal_length, sepal_width, petal_length, petal_width]],
-                              columns=feature_names)
-    prediction = model.predict(input_data)
-    predicted_species_index = prediction[0]
-    predicted_species_name = species_names[predicted_species_index]
+    input_features = [sepal_length, sepal_width, petal_length, petal_width]
+    # Use the predict_species function from predictor.py
+    predicted_species_name = predict_species(model, input_features, feature_names, species_names)
 
     st.markdown(
         f"<div class='prediction-box'>Predicted Species: **{predicted_species_name}**</div>",
@@ -131,40 +128,16 @@ if st.button("Predict Species"):
 
 st.markdown("---")
 
-# --- Optional: Data Visualization ---
+# --- Data Visualization ---
 st.header("Iris Dataset Overview")
-st.write("A scatter plot of the Iris dataset, colored by species.")
+st.write("Scatter plots of the Iris dataset, colored by species.")
 
-# Create a scatter plot using Plotly Express
-fig = px.scatter(
-    df,
-    x="sepal length (cm)",
-    y="sepal width (cm)",
-    color="species_name",
-    hover_data=["petal length (cm)", "petal width (cm)"],
-    title="Sepal Length vs. Sepal Width by Species",
-    labels={
-        "sepal length (cm)": "Sepal Length",
-        "sepal width (cm)": "Sepal Width",
-        "species_name": "Species"
-    }
-)
-st.plotly_chart(fig, use_container_width=True)
-
-fig_petal = px.scatter(
-    df,
-    x="petal length (cm)",
-    y="petal width (cm)",
-    color="species_name",
-    hover_data=["sepal length (cm)", "sepal width (cm)"],
-    title="Petal Length vs. Petal Width by Species",
-    labels={
-        "petal length (cm)": "Petal Length",
-        "petal width (cm)": "Petal Width",
-        "species_name": "Species"
-    }
-)
-st.plotly_chart(fig_petal, use_container_width=True)
+# Use visualization functions from visualizer.py
+st.plotly_chart(create_sepal_plot(df), use_container_width=True)
+st.plotly_chart(create_petal_plot(df), use_container_width=True)
 
 st.markdown("---")
 st.write("This app uses a RandomForestClassifier trained on the Iris dataset.")
+
+# --- Attribution ---
+st.markdown("<p style='text-align: center; color: gray; font-size: 0.9em;'>Made by Nisha Pal</p>", unsafe_allow_html=True)
